@@ -5,7 +5,21 @@ using HotelChannelManager.Services;
 using HotelChannelManager.Data;
 using Microsoft.EntityFrameworkCore;
 
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "logs/hotel-channel-manager-.txt",
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"
+    )
+    .CreateLogger();
+
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -42,7 +56,8 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddSingleton<InMemoryStore>(); 
 // Queue → Singleton olmalı, her yerden aynı kuyruk erişilmeli
 builder.Services.AddSingleton<ReservationQueue>();
-
+builder.Services.AddSingleton<FakeOtaService>();
+builder.Services.AddSingleton<FakePmsService>();
 // Worker → Arka planda sürekli çalışacak
 builder.Services.AddHostedService<ReservationWorker>();
 // SQLite veritabanı — dosya olarak kaydedilir
