@@ -58,6 +58,9 @@ builder.Services.AddSingleton<InMemoryStore>();
 builder.Services.AddSingleton<ReservationQueue>();
 builder.Services.AddSingleton<FakeOtaService>();
 builder.Services.AddSingleton<FakePmsService>();
+builder.Services.AddScoped<FakeMailboxService>();
+builder.Services.AddScoped<MailIntegrationService>();
+builder.Services.AddScoped<MailIntegrationService>();
 // Worker → Arka planda sürekli çalışacak
 builder.Services.AddHostedService<ReservationWorker>();
 // SQLite veritabanı — dosya olarak kaydedilir

@@ -14,4 +14,6 @@ public class AppDbContext : DbContext
     // DbSet → Veritabanındaki tablo
     // Reservations → "reservations" tablosu olacak
     public DbSet<Reservation> Reservations { get; set; }
+    public DbSet<ProviderIntegration> ProviderIntegrations { get; set; }
+    public DbSet<IncomingMail> IncomingMails { get; set; }
 }
