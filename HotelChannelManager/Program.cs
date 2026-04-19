@@ -4,9 +4,9 @@ using System.Text;
 using HotelChannelManager.Services;
 using HotelChannelManager.Data;
 using Microsoft.EntityFrameworkCore;
-
+using HotelChannelManager.Models;
 using Serilog;
-
+using HotelChannelManager.Services.Parsers;
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console()
@@ -51,6 +51,8 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+
+
 // TokenService'i kaydet
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddSingleton<InMemoryStore>(); 
@@ -60,9 +62,11 @@ builder.Services.AddSingleton<FakeOtaService>();
 builder.Services.AddSingleton<FakePmsService>();
 builder.Services.AddScoped<FakeMailboxService>();
 builder.Services.AddScoped<MailIntegrationService>();
-builder.Services.AddScoped<MailIntegrationService>();
 // Worker → Arka planda sürekli çalışacak
 builder.Services.AddHostedService<ReservationWorker>();
+builder.Services.AddScoped<PdfParserService>();
+builder.Services.AddScoped<OtsMtsParser>();
+builder.Services.AddScoped<JollyturParser>();
 // SQLite veritabanı — dosya olarak kaydedilir
 // Faz 4'te SQL Server'a geçebiliriz
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -87,9 +91,43 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+
+
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+// Uygulama başlarken fake entegrasyonlar ekle
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    if (!context.ProviderIntegrations.Any())
+    {
+        context.ProviderIntegrations.AddRange(
+            new ProviderIntegration
+            {
+                ProviderName = "OTS/MTS",
+                Username = "reservation@monart.com.tr",
+                Password = "test123",
+                VoucherType = "Full",
+                Interval = 2,
+                IsActive = true
+            },
+            new ProviderIntegration
+            {
+                ProviderName = "ORS",
+                Username = "ors@hotel.com",
+                Password = "ors123",
+                VoucherType = "Operator",
+                Interval = 2,
+                IsActive = true
+            }
+        );
+
+        await context.SaveChangesAsync();
+    }
+}
 
 app.UseSwagger();
 app.UseSwaggerUI();

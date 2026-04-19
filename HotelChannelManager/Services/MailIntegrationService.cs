@@ -7,10 +7,14 @@ using Microsoft.EntityFrameworkCore;
 public class MailIntegrationService
 {
     private readonly ILogger<MailIntegrationService> _logger;
+    private readonly PdfParserService _pdfParser;
 
-    public MailIntegrationService(ILogger<MailIntegrationService> logger)
+    public MailIntegrationService(
+        ILogger<MailIntegrationService> logger,
+        PdfParserService pdfParser)
     {
         _logger = logger;
+        _pdfParser = pdfParser;
     }
 
     public async Task ProcessMailAsync(
@@ -39,10 +43,6 @@ public class MailIntegrationService
             return;
         }
 
-        _logger.LogInformation(
-            "Entegrasyon bulundu: Provider={Provider}, VoucherType={VoucherType}",
-            integration.ProviderName, integration.VoucherType);
-
         // 2. PDF eki var mı?
         if (string.IsNullOrEmpty(mail.AttachmentName))
         {
@@ -55,17 +55,53 @@ public class MailIntegrationService
             return;
         }
 
-        // 3. Faz 8'de PDF parse edilecek
-        // Şimdilik kuyruğa aldık de
+        // 3. PDF parse et
         _logger.LogInformation(
-            "PDF kuyruğa alındı: MailId={Id}, Attachment={Attachment}",
-            mail.Id, mail.AttachmentName);
+            "PDF parse ediliyor: MailId={Id}, Provider={Provider}",
+            mail.Id, mail.ProviderName);
 
+        // Fake PDF content → byte dizisine çevir
+        var pdfBytes = System.Text.Encoding.UTF8
+            .GetBytes(mail.AttachmentContent ?? string.Empty);
+
+        var parsed = _pdfParser.Parse(mail.ProviderName, pdfBytes);
+
+        if (parsed is null)
+        {
+            _logger.LogWarning(
+                "PDF parse başarısız: MailId={Id}", mail.Id);
+
+            mail.Status = "FAILED";
+            mail.ErrorMessage = "PDF parse edilemedi";
+            await context.SaveChangesAsync();
+            return;
+        }
+
+        // 4. Rezervasyon oluştur
+        var reservation = new Reservation
+        {
+            GuestName = string.IsNullOrEmpty(parsed.GuestName)
+                ? "Unknown Guest" : parsed.GuestName,
+            RoomType = string.IsNullOrEmpty(parsed.RoomType)
+                ? "STANDARD" : parsed.RoomType,
+            CheckIn = parsed.CheckIn == default
+                ? DateOnly.FromDateTime(DateTime.Today) : parsed.CheckIn,
+            CheckOut = parsed.CheckOut == default
+                ? DateOnly.FromDateTime(DateTime.Today.AddDays(7)) : parsed.CheckOut,
+            Source = mail.ProviderName,
+            Status = "PENDING"
+        };
+
+        context.Reservations.Add(reservation);
+
+        // 5. Mail durumunu güncelle
         mail.Status = "CONVERTED";
         mail.ConvertedAt = DateTime.UtcNow;
+
         await context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Mail başarıyla işlendi: MailId={Id}", mail.Id);
+            "Rezervasyon oluşturuldu: MailId={Id}, ReservationId={ResId}, Guest={Guest}",
+            mail.Id, reservation.Id, reservation.GuestName);
     }
 }
