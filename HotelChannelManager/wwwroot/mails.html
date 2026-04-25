@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hotel Channel Manager — Mailler</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col" style="font-family:'Segoe UI',sans-serif;">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="flex items-center gap-4">
+      <span class="font-bold text-lg tracking-wide">Hotel Channel Manager</span>
+      <div class="flex gap-1 ml-4">
+        <a href="/mails.html"
+          class="px-3 py-1 rounded text-sm font-medium bg-white text-blue-700">Mailler</a>
+        <a href="/reservations.html"
+          class="px-3 py-1 rounded text-sm font-medium text-white hover:bg-blue-700">Rezervasyonlar</a>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="fetchMails()"
+        class="bg-green-500 hover:bg-green-600 text-white text-xs font-medium px-3 py-1 rounded">
+        Mail Çek
+      </button>
+      <button onclick="logout()"
+        class="bg-blue-800 hover:bg-blue-900 text-white text-xs px-3 py-1 rounded">
+        Çıkış
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="bg-white border-b px-4 flex items-center gap-1">
+    <span class="tab-btn active">Mailler</span>
+    <span id="mailCount" class="text-xs text-gray-400 ml-2"></span>
+  </div>
+
+  <!-- Filter Panel -->
+  <div class="bg-white border-b px-4 py-2">
+    <div class="grid grid-cols-6 gap-2 mb-2">
+      <input id="f_subject" class="filter-input col-span-2" placeholder="Subject" />
+      <div class="flex items-center gap-1 col-span-1">
+        <input type="checkbox" id="f_fromReq" />
+        <label for="f_fromReq" class="text-xs text-gray-600 whitespace-nowrap">From Address Required</label>
+      </div>
+      <div class="flex items-center gap-1 col-span-1">
+        <input type="checkbox" id="f_toReq" />
+        <label for="f_toReq" class="text-xs text-gray-600 whitespace-nowrap">To Address Required</label>
+      </div>
+      <div></div>
+      <div></div>
+    </div>
+    <div class="grid grid-cols-6 gap-2 mb-2">
+      <input id="f_beginReceiveDate" type="date" class="filter-input" placeholder="BeginReceiveDate" title="BeginReceiveDate" />
+      <input id="f_beginMailDate"    type="date" class="filter-input" placeholder="BeginMailDate"    title="BeginMailDate" />
+      <input id="f_customerId"  class="filter-input" placeholder="CustomerId" />
+      <input id="f_fromAddress" class="filter-input" placeholder="FromAddress" />
+      <input id="f_mailId"      class="filter-input" placeholder="MailId" />
+      <div class="flex gap-1">
+        <select id="f_isRead" class="filter-input flex-1">
+          <option value="">IsRead</option>
+          <option value="true">Evet</option>
+          <option value="false">Hayır</option>
+        </select>
+        <select id="f_isConverted" class="filter-input flex-1" style="min-width:90px;">
+          <option value="">IsConverted</option>
+          <option value="true">Evet</option>
+          <option value="false">Hayır</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid grid-cols-6 gap-2">
+      <input id="f_endReceiveDate" type="date" class="filter-input" placeholder="EndReceiveDate" title="EndReceiveDate" />
+      <input id="f_endMailDate"    type="date" class="filter-input" placeholder="EndMailDate"    title="EndMailDate" />
+      <input id="f_providerId"  class="filter-input" placeholder="ProviderId" />
+      <input id="f_toAddress"   class="filter-input" placeholder="ToAddress" />
+      <div></div>
+      <div class="flex gap-1">
+        <button onclick="loadMails()"
+          class="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-medium px-3 py-1 rounded">
+          Get
+        </button>
+        <button onclick="clearFilters()"
+          class="flex-1 bg-purple-500 hover:bg-purple-600 text-white text-xs font-medium px-3 py-1 rounded flex items-center gap-1 justify-center">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2l-6 6v7l-6-3V12L3 6V4z"/>
+          </svg>
+          Filter Clear
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drag hint -->
+  <div class="bg-white border-b px-4 py-1">
+    <span class="text-xs text-gray-400">☰ sütunları gruba sürükle</span>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden fixed top-4 right-4 z-50 px-4 py-2 rounded shadow text-sm font-medium text-white"></div>
+
+  <!-- Table -->
+  <div class="flex-1 overflow-auto px-2 py-2">
+    <div class="table-wrap bg-white shadow rounded">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="checkAll" /></th>
+            <th>Id</th>
+            <th>UniqueId</th>
+            <th>UidKey</th>
+            <th>MailDate</th>
+            <th>ReceiveDate</th>
+            <th>FromAddress</th>
+            <th>ToAddress</th>
+            <th>Subject</th>
+            <th>HasAttachments</th>
+            <th>ConvertErrorMessage</th>
+            <th>Durum</th>
+            <th>İşlem</th>
+          </tr>
+        </thead>
+        <tbody id="mailTable">
+          <tr><td colspan="13" class="text-center py-6 text-gray-400">Yükleniyor...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/auth.js"></script>
+  <script>
+    requireAuth();
+
+    async function loadMails() {
+      const params = new URLSearchParams();
+      const v = id => document.getElementById(id).value;
+
+      if (v('f_subject'))         params.set('subject',          v('f_subject'));
+      if (v('f_fromAddress'))     params.set('fromAddress',       v('f_fromAddress'));
+      if (v('f_toAddress'))       params.set('toAddress',         v('f_toAddress'));
+      if (v('f_mailId'))          params.set('mailId',            v('f_mailId'));
+      if (v('f_customerId'))      params.set('customerId',        v('f_customerId'));
+      if (v('f_providerId'))      params.set('providerId',        v('f_providerId'));
+      if (v('f_isRead'))          params.set('isRead',            v('f_isRead'));
+      if (v('f_isConverted'))     params.set('isConverted',       v('f_isConverted'));
+      if (v('f_beginReceiveDate'))params.set('beginReceiveDate',  v('f_beginReceiveDate'));
+      if (v('f_endReceiveDate'))  params.set('endReceiveDate',    v('f_endReceiveDate'));
+      if (v('f_beginMailDate'))   params.set('beginMailDate',     v('f_beginMailDate'));
+      if (v('f_endMailDate'))     params.set('endMailDate',       v('f_endMailDate'));
+      if (document.getElementById('f_fromReq').checked) params.set('fromAddressRequired', 'true');
+      if (document.getElementById('f_toReq').checked)   params.set('toAddressRequired',   'true');
+
+      const res = await apiFetch(`/api/mail?${params}`);
+      if (!res) return;
+      const json = await res.json();
+
+      document.getElementById('mailCount').textContent = `${json.count} kayıt`;
+      renderTable(json.data);
+    }
+
+    function renderTable(mails) {
+      const tbody = document.getElementById('mailTable');
+      if (!mails || mails.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-6 text-gray-400">Kayıt bulunamadı</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = mails.map(m => {
+        const isGreen = m.hasAttachments;
+        const rowClass = isGreen ? 'row-green' : 'row-white';
+        const subjectStyle = !m.isRead ? 'font-weight:700;' : '';
+
+        return `<tr class="${rowClass} cursor-pointer" onclick="markRead(${m.id}, this)">
+          <td onclick="event.stopPropagation()"><input type="checkbox" /></td>
+          <td>${m.id}</td>
+          <td title="${m.uniqueId}">${truncate(m.uniqueId, 18)}</td>
+          <td title="${m.uidKey}">${truncate(m.uidKey, 18)}</td>
+          <td>${formatDateTime(m.mailDate)}</td>
+          <td>${formatDateTime(m.receiveDate)}</td>
+          <td title="${m.fromAddress}">${truncate(m.fromAddress, 18)}</td>
+          <td title="${m.toAddress}">${truncate(m.toAddress, 18)}</td>
+          <td title="${m.subject}" style="${subjectStyle}">${truncate(m.subject, 60)}</td>
+          <td class="text-center">
+            ${m.hasAttachments ? '<input type="checkbox" checked disabled />' : '<input type="checkbox" disabled />'}
+          </td>
+          <td title="${m.convertErrorMessage || ''}">${truncate(m.convertErrorMessage || '', 30)}</td>
+          <td>${statusBadge(m.status)}</td>
+          <td onclick="event.stopPropagation()">
+            ${m.status !== 'CONVERTED'
+              ? `<button onclick="convertMail(${m.id})"
+                   class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-0.5 rounded">
+                   Convert
+                 </button>`
+              : '<span class="text-xs text-green-700 font-semibold">✓ Dönüştürüldü</span>'}
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function statusBadge(s) {
+      const map = {
+        PENDING:   'badge-pending',
+        CONVERTED: 'badge-converted',
+        FAILED:    'badge-failed'
+      };
+      return `<span class="badge ${map[s] || ''}">${s}</span>`;
+    }
+
+    function truncate(str, n) {
+      if (!str) return '';
+      return str.length > n ? str.slice(0, n) + '…' : str;
+    }
+
+    async function convertMail(id) {
+      const res = await apiFetch(`/api/mail/${id}/convert`, { method: 'POST' });
+      if (!res) return;
+      const json = await res.json();
+      showToast(json.success ? 'Rezervasyon oluşturuldu!' : (json.error || 'Hata'), json.success);
+      loadMails();
+    }
+
+    async function markRead(id, row) {
+      await apiFetch(`/api/mail/${id}/read`, { method: 'PATCH' });
+      row.querySelectorAll('td').forEach(td => {
+        td.style.fontWeight = 'normal';
+      });
+    }
+
+    async function fetchMails() {
+      showToast('Mailler çekiliyor...', true, 'bg-yellow-500');
+      const res = await apiFetch('/api/mail/fetch', { method: 'POST' });
+      if (!res) return;
+      const json = await res.json();
+      showToast(json.message, json.success);
+      loadMails();
+    }
+
+    function clearFilters() {
+      ['f_subject','f_fromAddress','f_toAddress','f_mailId','f_customerId','f_providerId',
+       'f_beginReceiveDate','f_endReceiveDate','f_beginMailDate','f_endMailDate'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      document.getElementById('f_isRead').value = '';
+      document.getElementById('f_isConverted').value = '';
+      document.getElementById('f_fromReq').checked = false;
+      document.getElementById('f_toReq').checked = false;
+      loadMails();
+    }
+
+    function showToast(msg, success, cls) {
+      const t = document.getElementById('toast');
+      t.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded shadow text-sm font-medium text-white ${cls || (success ? 'bg-green-600' : 'bg-red-600')}`;
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 3000);
+    }
+
+    document.getElementById('checkAll').addEventListener('change', function () {
+      document.querySelectorAll('#mailTable input[type=checkbox]').forEach(cb => cb.checked = this.checked);
+    });
+
+    loadMails();
+  </script>
+</body>
+</html>

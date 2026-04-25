@@ -3,14 +3,22 @@ namespace HotelChannelManager.Models;
 public class IncomingMail
 {
     public int Id { get; set; }
-    public string From { get; set; } = string.Empty;         // Gönderen
-    public string Subject { get; set; } = string.Empty;      // Konu
-    public string Body { get; set; } = string.Empty;         // Mail içeriği
-    public string? AttachmentName { get; set; }              // PDF/RXT adı
-    public string? AttachmentContent { get; set; }           // PDF içeriği (base64)
-    public string ProviderName { get; set; } = string.Empty; // Hangi provider
-    public string Status { get; set; } = "PENDING";          // PENDING, CONVERTED, FAILED
-    public string? ErrorMessage { get; set; }
-    public DateTime ReceivedAt { get; set; } = DateTime.UtcNow;
+    public string UniqueId { get; set; } = string.Empty;       // Mail sistemindeki benzersiz ID
+    public string UidKey { get; set; } = string.Empty;         // UID anahtarı
+    public DateTime? MailDate { get; set; }                     // Mailin kendi tarihi
+    public DateTime ReceiveDate { get; set; } = DateTime.UtcNow; // Alınma tarihi
+    public string FromAddress { get; set; } = string.Empty;    // Gönderen
+    public string ToAddress { get; set; } = string.Empty;      // Alıcı
+    public string Subject { get; set; } = string.Empty;        // Konu
+    public string Body { get; set; } = string.Empty;           // İçerik
+    public bool HasAttachments { get; set; }                   // Ek var mı
+    public string? AttachmentName { get; set; }                // PDF/EK adı
+    public string? AttachmentContent { get; set; }             // EK içeriği (base64)
+    public bool IsRead { get; set; }                           // Okundu mu
+    public string ProviderName { get; set; } = string.Empty;  // Provider (OTS/MTS, ORS...)
+    public int? CustomerId { get; set; }                       // Müşteri ID
+    public int? ProviderId { get; set; }                       // Provider ID (FK)
+    public string Status { get; set; } = "PENDING";           // PENDING, CONVERTED, FAILED
+    public string? ConvertErrorMessage { get; set; }           // Dönüştürme hata mesajı
     public DateTime? ConvertedAt { get; set; }
 }

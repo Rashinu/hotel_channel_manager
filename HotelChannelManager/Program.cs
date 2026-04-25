@@ -46,7 +46,7 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            Array.Empty<string>()
         }
     });
 });
@@ -62,6 +62,9 @@ builder.Services.AddSingleton<FakeOtaService>();
 builder.Services.AddSingleton<FakePmsService>();
 builder.Services.AddScoped<FakeMailboxService>();
 builder.Services.AddScoped<MailIntegrationService>();
+builder.Services.AddScoped<SmtpSenderService>();
+builder.Services.AddScoped<ImapMailFetchService>();
+builder.Services.AddScoped<SuenoTurParser>();
 // Worker → Arka planda sürekli çalışacak
 builder.Services.AddHostedService<ReservationWorker>();
 builder.Services.AddScoped<PdfParserService>();
@@ -132,8 +135,11 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseAuthentication(); // ← Önce Authentication
-app.UseAuthorization();  // ← Sonra Authorization
+app.UseDefaultFiles();   // index.html'i default yap
+app.UseStaticFiles();    // wwwroot servis et
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/health", () => new { status = "OK", timestamp = DateTime.UtcNow });

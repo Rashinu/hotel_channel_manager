@@ -1,0 +1,124 @@
+* { box-sizing: border-box; }
+
+/* Tablo satır renkleri */
+.row-green { background-color: #2e7d32 !important; color: #fff; }
+.row-green td { color: #fff !important; }
+.row-green:hover { background-color: #1b5e20 !important; }
+
+.row-white { background-color: #fff; }
+.row-white:hover { background-color: #f5f5f5; }
+
+/* Scrollable tablo */
+.table-wrap { overflow-x: auto; }
+
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  padding: 5px 8px;
+  white-space: nowrap;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+td {
+  border: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #222;
+}
+
+/* Filter input stili */
+.filter-input {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 3px 7px;
+  font-size: 12px;
+  width: 100%;
+  height: 28px;
+}
+.filter-input:focus { outline: none; border-color: #1976d2; }
+
+/* Chip / badge */
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-new    { background: #e3f2fd; color: #1565c0; }
+.badge-changed { background: #fff8e1; color: #f57f17; }
+.badge-cancelled { background: #fce4ec; color: #c62828; }
+.badge-pending  { background: #f3e5f5; color: #6a1b9a; }
+.badge-confirmed { background: #e8f5e9; color: #1b5e20; }
+.badge-failed  { background: #ffebee; color: #b71c1c; }
+.badge-converted { background: #e8f5e9; color: #1b5e20; }
+
+/* Sidebar item */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+}
+.sidebar-item:hover { background: #e3f2fd; }
+.sidebar-item.active { background: #1976d2; color: #fff; font-weight: 600; }
+.sidebar-item.active .count-badge { background: #fff; color: #1976d2; }
+
+.count-badge {
+  background: #1976d2;
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Top navbar */
+.topbar {
+  background: #1565c0;
+  color: #fff;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  justify-content: space-between;
+}
+
+/* Tab buton */
+.tab-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  color: #555;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+.tab-btn.active {
+  border-bottom: 2px solid #1976d2;
+  color: #1976d2;
+  font-weight: 600;
+}
+
+/* Checkbox görünümü */
+input[type=checkbox] { cursor: pointer; }
+
+/* Loading overlay */
+.loading { opacity: 0.5; pointer-events: none; }
+
+/* Truncate cell tooltip */
+td[title] { cursor: default; }

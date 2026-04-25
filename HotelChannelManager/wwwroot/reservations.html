@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hotel Channel Manager — Rezervasyonlar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col" style="font-family:'Segoe UI',sans-serif;">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="flex items-center gap-4">
+      <span class="font-bold text-lg tracking-wide">Hotel Channel Manager</span>
+      <div class="flex gap-1 ml-4">
+        <a href="/mails.html"
+          class="px-3 py-1 rounded text-sm font-medium text-white hover:bg-blue-700">Mailler</a>
+        <a href="/reservations.html"
+          class="px-3 py-1 rounded text-sm font-medium bg-white text-blue-700">Rezervasyonlar</a>
+      </div>
+    </div>
+    <button onclick="logout()" class="bg-blue-800 hover:bg-blue-900 text-white text-xs px-3 py-1 rounded">
+      Çıkış
+    </button>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="bg-white border-b px-4 flex items-center">
+    <button class="tab-btn active" onclick="setTab('reservations', this)">Rezervasyonlar</button>
+    <button class="tab-btn" onclick="setTab('pending_agency', this)">Acenta Tarafında İşlem Bekleyenler
+      <span class="ml-1 text-xs text-gray-400">(0)</span>
+    </button>
+    <button class="tab-btn" onclick="setTab('status', this)">Durum</button>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden fixed top-4 right-4 z-50 px-4 py-2 rounded shadow text-sm font-medium text-white"></div>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="hidden fixed inset-0 z-40 bg-black bg-opacity-40 flex items-start justify-center pt-10">
+    <div class="bg-white rounded shadow-xl w-full max-w-4xl max-h-screen overflow-y-auto relative">
+      <button onclick="closeDetail()"
+        class="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-xl font-bold z-10">✕</button>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <!-- Main layout -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Left sidebar -->
+    <div class="w-48 bg-white border-r flex-shrink-0 overflow-y-auto py-2">
+      <!-- Türe göre -->
+      <div class="px-2 mb-1">
+        <div class="sidebar-item active" id="sb_all" onclick="setSidebarFilter('all', this)">
+          <span>⊞ Hepsi</span>
+          <span class="count-badge" id="cnt_all">0</span>
+        </div>
+        <div class="sidebar-item" id="sb_new" onclick="setSidebarFilter('new', this)">
+          <span>⊙ New</span>
+          <span class="count-badge" id="cnt_new">0</span>
+        </div>
+        <div class="sidebar-item" id="sb_changed" onclick="setSidebarFilter('changed', this)">
+          <span>△ Changed</span>
+          <span class="count-badge" id="cnt_changed">0</span>
+        </div>
+        <div class="sidebar-item" id="sb_cancelled" onclick="setSidebarFilter('cancelled', this)">
+          <span>✕ Cancelled</span>
+          <span class="count-badge" id="cnt_cancelled">0</span>
+        </div>
+        <div class="sidebar-item" id="sb_other" onclick="setSidebarFilter('other', this)">
+          <span>ℹ Diğerleri</span>
+          <span class="count-badge" id="cnt_other">0</span>
+        </div>
+      </div>
+
+      <hr class="my-1 mx-2" />
+
+      <!-- Provider filtreleri -->
+      <div class="px-3 py-1">
+        <p class="text-xs text-gray-400 font-semibold mb-1">SAĞLAYICILAR</p>
+        <div id="providerFilters" class="space-y-1"></div>
+      </div>
+
+      <hr class="my-1 mx-2" />
+
+      <!-- Durum filtreleri -->
+      <div class="px-2 py-1 space-y-0.5">
+        <div class="sidebar-item" onclick="setStatusFilter('pending')">
+          <span>≡ Onaydakiler</span>
+          <span class="count-badge bg-gray-200 text-gray-600" id="cnt_status_pending">0</span>
+        </div>
+        <div class="sidebar-item" onclick="setStatusFilter('waiting')">
+          <span>⚠ Bekleyenler</span>
+          <span class="count-badge bg-orange-200 text-orange-700" id="cnt_status_waiting">0</span>
+        </div>
+        <div class="sidebar-item" onclick="setStatusFilter('confirmed')">
+          <span>✓ Onaylananlar</span>
+          <span class="count-badge bg-green-200 text-green-700" id="cnt_status_confirmed">0</span>
+        </div>
+        <div class="sidebar-item" onclick="setStatusFilter('failed')">
+          <span>✕ Reddedilenler</span>
+          <span class="count-badge bg-red-200 text-red-700" id="cnt_status_failed">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content area -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <div class="table-wrap flex-1 overflow-auto p-2">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="checkAll" /></th>
+              <th></th><!-- İkon -->
+              <th>Türü</th>
+              <th>Sağlayıcı</th>
+              <th>Acente</th>
+              <th>Voucher</th>
+              <th>Otel</th>
+              <th>Giriş</th>
+              <th>Çıkış</th>
+              <th>Eklenme Tarihi</th>
+              <th>Satış Tarihi</th>
+              <th>Pansiyon</th>
+              <th>Y+Ç+B</th>
+              <th>Oda</th>
+              <th>Oda Tipi</th>
+              <th>Geceleme</th>
+              <th>Durum</th>
+            </tr>
+          </thead>
+          <tbody id="resTable">
+            <tr><td colspan="17" class="text-center py-6 text-gray-400">Yükleniyor...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/auth.js"></script>
+  <script>
+    requireAuth();
+
+    let allData = [];
+    let activeTypeFilter = 'all';
+    let activeProviders = new Set();
+    let activeStatusFilter = null;
+
+    async function loadReservations() {
+      const res = await apiFetch('/api/reservations');
+      if (!res) return;
+      const json = await res.json();
+      allData = json.data || [];
+      buildSidebarCounts();
+      buildProviderFilters();
+      renderTable();
+    }
+
+    function buildSidebarCounts() {
+      const cnt = (type) => allData.filter(r =>
+        r.reservationType?.toUpperCase() === type.toUpperCase()).length;
+
+      document.getElementById('cnt_all').textContent       = allData.length;
+      document.getElementById('cnt_new').textContent       = cnt('NEW');
+      document.getElementById('cnt_changed').textContent   = cnt('CHANGED');
+      document.getElementById('cnt_cancelled').textContent = cnt('CANCELLED');
+      document.getElementById('cnt_other').textContent     = allData.filter(r =>
+        !['NEW','CHANGED','CANCELLED'].includes(r.reservationType?.toUpperCase())).length;
+
+      document.getElementById('cnt_status_pending').textContent   = allData.filter(r => r.status === 'PENDING').length;
+      document.getElementById('cnt_status_confirmed').textContent = allData.filter(r => r.status === 'CONFIRMED').length;
+      document.getElementById('cnt_status_failed').textContent    = allData.filter(r => r.status === 'FAILED').length;
+      document.getElementById('cnt_status_waiting').textContent   = 0;
+    }
+
+    function buildProviderFilters() {
+      const providers = [...new Set(allData.map(r => r.providerName || r.source).filter(Boolean))];
+      const container = document.getElementById('providerFilters');
+      container.innerHTML = providers.map(p => {
+        const cnt = allData.filter(r => (r.providerName || r.source) === p).length;
+        return `<label class="flex items-center justify-between text-xs cursor-pointer hover:text-blue-600">
+          <span class="flex items-center gap-1">
+            <input type="checkbox" onchange="toggleProvider('${p}')" class="mr-1" />
+            ${p}
+          </span>
+          <span class="text-gray-400">${cnt}</span>
+        </label>`;
+      }).join('');
+    }
+
+    function toggleProvider(name) {
+      if (activeProviders.has(name)) activeProviders.delete(name);
+      else activeProviders.add(name);
+      renderTable();
+    }
+
+    function setSidebarFilter(type, el) {
+      activeTypeFilter = type;
+      activeStatusFilter = null;
+      document.querySelectorAll('.sidebar-item').forEach(e => e.classList.remove('active'));
+      el.classList.add('active');
+      renderTable();
+    }
+
+    function setStatusFilter(status) {
+      activeStatusFilter = status;
+      activeTypeFilter = 'all';
+      document.querySelectorAll('.sidebar-item').forEach(e => e.classList.remove('active'));
+      renderTable();
+    }
+
+    function setTab(tab, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+
+    function filtered() {
+      let data = [...allData];
+
+      if (activeTypeFilter && activeTypeFilter !== 'all') {
+        const map = { new: 'NEW', changed: 'CHANGED', cancelled: 'CANCELLED' };
+        const type = map[activeTypeFilter];
+        if (type) data = data.filter(r => r.reservationType?.toUpperCase() === type);
+        else data = data.filter(r => !['NEW','CHANGED','CANCELLED'].includes(r.reservationType?.toUpperCase()));
+      }
+
+      if (activeStatusFilter) {
+        data = data.filter(r => r.status?.toLowerCase() === activeStatusFilter.toLowerCase());
+      }
+
+      if (activeProviders.size > 0) {
+        data = data.filter(r => activeProviders.has(r.providerName || r.source));
+      }
+
+      return data;
+    }
+
+    function renderTable() {
+      const data = filtered();
+      const tbody = document.getElementById('resTable');
+
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="17" class="text-center py-6 text-gray-400">Kayıt bulunamadı</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.map(r => {
+        const nights = nightCount(r.checkIn, r.checkOut);
+        const rowClass = r.reservationType?.toUpperCase() === 'NEW' ? 'row-green' : 'row-white';
+        const ycb = `${r.adultCount}+${r.childCount}+${r.babyCount}`;
+        const typeIcon = { NEW: '✉', CHANGED: '✎', CANCELLED: '✕' }[r.reservationType?.toUpperCase()] || '?';
+
+        return `<tr class="${rowClass} cursor-pointer" onclick="openDetail(${r.id})">
+          <td onclick="event.stopPropagation()"><input type="checkbox" /></td>
+          <td class="text-center">${typeIcon}</td>
+          <td><span class="badge badge-${(r.reservationType||'').toLowerCase()}">${r.reservationType || '—'}</span></td>
+          <td>${r.providerName || r.source || '—'}</td>
+          <td>${r.agency || '—'}</td>
+          <td class="font-mono text-xs">${r.voucher || '—'}</td>
+          <td title="${r.hotel}">${truncate(r.hotel, 22)}</td>
+          <td>${formatDate(r.checkIn)}</td>
+          <td>${formatDate(r.checkOut)}</td>
+          <td>${formatDateTime(r.createdAt)}</td>
+          <td>${formatDateTime(r.saleDate)}</td>
+          <td class="font-semibold">${r.pension || '—'}</td>
+          <td>${ycb}</td>
+          <td>${r.roomCount || 1}</td>
+          <td>${truncate(r.roomType, 14)}</td>
+          <td>${nights}</td>
+          <td>${statusBadge(r.status)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function nightCount(checkIn, checkOut) {
+      if (!checkIn || !checkOut) return '—';
+      const a = new Date(checkIn), b = new Date(checkOut);
+      const diff = Math.round((b - a) / 86400000);
+      return diff > 0 ? diff : '—';
+    }
+
+    function statusBadge(s) {
+      const map = { PENDING:'badge-pending', CONFIRMED:'badge-confirmed', FAILED:'badge-failed', CANCELLED:'badge-cancelled' };
+      return `<span class="badge ${map[s] || ''}">${s}</span>`;
+    }
+
+    function truncate(str, n) {
+      if (!str) return '—';
+      return str.length > n ? str.slice(0, n) + '…' : str;
+    }
+
+    async function openDetail(id) {
+      const res = await apiFetch(`/api/reservations/${id}`);
+      if (!res) return;
+      const json = await res.json();
+      renderDetail(json.data);
+      document.getElementById('detailModal').classList.remove('hidden');
+    }
+
+    function closeDetail() {
+      document.getElementById('detailModal').classList.add('hidden');
+    }
+
+    function renderDetail(r) {
+      const nights = nightCount(r.checkIn, r.checkOut);
+      document.getElementById('detailContent').innerHTML = `
+        <div class="p-4 border-b flex items-center justify-between">
+          <span class="font-bold text-gray-700">${r.id} — Rezervasyon Bilgileri</span>
+        </div>
+        <div class="flex gap-0">
+          <!-- Sol panel -->
+          <div class="w-72 border-r p-3 flex-shrink-0 text-sm">
+            ${field('Türü', `<span class="badge badge-${(r.reservationType||'').toLowerCase()}">${r.reservationType||'—'}</span>`)}
+            ${field('Otel', `<span class="text-red-600 font-semibold">${r.hotel || '—'}</span>`)}
+            ${field('Acente', r.agency || '—')}
+            ${field('Voucher', `<span class="font-mono">${r.voucher || '—'}</span>`)}
+            ${field('Geliş', formatDate(r.checkIn))}
+            ${field('Ayrılış', formatDate(r.checkOut))}
+            ${field('Oda Tipi', `<span class="text-red-500">${r.roomType || '—'}</span>`)}
+            ${field('Pansiyon', `<span class="text-red-500 font-semibold">${r.pension || '—'}</span>`)}
+            ${field('Kişi Sayısı', `${r.adultCount} + ${r.childCount} + ${r.babyCount}`)}
+            ${field('Sağlayıcı', r.providerName || r.source || '—')}
+            ${field('Durum', statusBadge(r.status))}
+            ${field('Geceleme', nights)}
+            ${field('Eklenme T.', formatDateTime(r.createdAt))}
+            ${field('Satış T.', formatDateTime(r.saleDate))}
+          </div>
+          <!-- Sağ panel -->
+          <div class="flex-1 p-3">
+            <div class="flex border-b mb-3">
+              <button class="tab-btn active">Misafirler</button>
+              <button class="tab-btn">Forecast</button>
+              <button class="tab-btn">Oda Müsaitlik</button>
+              <button class="tab-btn">Dökümanlar</button>
+            </div>
+            <table class="w-full text-xs mb-4">
+              <thead>
+                <tr>
+                  <th>Sıra</th><th>Ünvan</th><th>Adı</th><th>Soyadı</th>
+                  <th>Yaş</th><th>Doğum Günü</th><th>Döküman No</th><th>Repeat</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${guestRows(r)}
+              </tbody>
+            </table>
+
+            <div class="text-xs text-gray-500 mb-2 font-semibold">Özel Notlar</div>
+            <div class="grid grid-cols-2 gap-2 text-xs mb-4">
+              ${noteField('Checkin')}
+              ${noteField('Oda Notu')}
+              ${noteField('Rez Notu')}
+              ${noteField('Extra İstek')}
+            </div>
+
+            <div class="flex gap-2 flex-wrap mt-4">
+              <button onclick="updateStatus(${r.id},'PENDING')"
+                class="px-3 py-1.5 text-xs font-semibold rounded bg-yellow-400 hover:bg-yellow-500 text-white">
+                ? Onaya Gönder
+              </button>
+              <button onclick="updateStatus(${r.id},'FAILED')"
+                class="px-3 py-1.5 text-xs font-semibold rounded bg-red-500 hover:bg-red-600 text-white">
+                ✕ Not Confirm
+              </button>
+              <button onclick="updateStatus(${r.id},'CONFIRMED')"
+                class="px-3 py-1.5 text-xs font-semibold rounded bg-green-600 hover:bg-green-700 text-white">
+                ✓ Otel Yazılımına Kaydet
+              </button>
+              <button onclick="updateStatus(${r.id},'CONFIRMED')"
+                class="px-3 py-1.5 text-xs font-semibold rounded bg-teal-500 hover:bg-teal-600 text-white">
+                ✓ Otel Yazılım + Acente Confirm
+              </button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function field(label, val) {
+      return `<div class="flex items-center mb-1 gap-1">
+        <span class="text-gray-500 w-28 flex-shrink-0">${label}</span>
+        <span class="flex-1">${val}</span>
+      </div>`;
+    }
+
+    function noteField(label) {
+      return `<div>
+        <div class="text-gray-500 mb-0.5">${label}</div>
+        <textarea class="w-full border rounded text-xs p-1 h-8 resize-none" readonly></textarea>
+      </div>`;
+    }
+
+    function guestRows(r) {
+      const parts = (r.guestName || '').split(' ');
+      const lastName  = parts.length > 1 ? parts[parts.length - 1] : '';
+      const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : (r.guestName || '');
+      return `<tr class="row-white">
+        <td>1</td><td>Mr/Ms</td>
+        <td>${firstName}</td>
+        <td>${lastName}</td>
+        <td>—</td><td>—</td><td>—</td><td>—</td>
+      </tr>`;
+    }
+
+    async function updateStatus(id, status) {
+      const res = await apiFetch(`/api/reservations/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+      });
+      if (!res) return;
+      const json = await res.json();
+      showToast(json.success ? `Durum: ${status}` : 'Hata', json.success);
+      closeDetail();
+      loadReservations();
+    }
+
+    function showToast(msg, success) {
+      const t = document.getElementById('toast');
+      t.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded shadow text-sm font-medium text-white ${success ? 'bg-green-600' : 'bg-red-600'}`;
+      t.textContent = msg;
+      t.classList.remove('hidden');
+      setTimeout(() => t.classList.add('hidden'), 3000);
+    }
+
+    document.getElementById('checkAll').addEventListener('change', function () {
+      document.querySelectorAll('#resTable input[type=checkbox]').forEach(cb => cb.checked = this.checked);
+    });
+
+    loadReservations();
+  </script>
+</body>
+</html>
