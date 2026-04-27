@@ -104,44 +104,28 @@ public class ImapMailFetchService
             // SuenoTur → body içinde tablo yazar, ek göndermez (HasAttachments=false).
             var hasAttachments = message.Attachments.Any();
 
-            // ADIM 10 — PROVIDER'I TESPİT ET
-            // From adresinden hangi acente olduğunu tahmin et.
-            // Bu bilgi sonra MailIntegrationService'de hangi parser çalışacağını belirler.
-            var providerName = DetectProvider(fromAddress, message.Subject);
+            // ADIM 10 — PROVIDER, REZERVASYon TİPİ VE URL TESPİT ET
+            var providerName      = DetectProvider(fromAddress, message.Subject);
+            var reservationType   = DetectReservationType(message.Subject);
+            var contentFileUrl    = ExtractContentFileUrl(body);
 
             // ADIM 11 — IncomingMail NESNESİ OLUŞTUR
-            // Mailin zarfı (from, to, subject, date) ve ham içeriği (body) DB modeline dönüştürülür.
-            // Body bu aşamada ham HTML olarak saklanır — parser sonra açacak.
             var incoming = new IncomingMail
             {
-                // IMAP'in uid numarası. "Bu maili daha önce çektim mi?" kontrolünde kullanılır.
-                // MailController'da: AnyAsync(m => m.UniqueId == mail.UniqueId)
-                UniqueId = uid.ToString(),
-
-                // Mailin kendi evrensel ID'si. Outlook detayında görünen uzun string (AAMkAGRl...).
-                // Fallback: MessageId yoksa IMAP uid'ini kullan.
-                UidKey = message.MessageId ?? uid.ToString(),
-
-                // Gönderenin kendi mail client'ında yazan tarih.
-                // UtcDateTime: zaman dilimi farkını ortadan kaldırır. Her zaman UTC sakla.
-                MailDate = message.Date.UtcDateTime,
-
-                // Bizim uygulamanın maili çektiği an. Sunucudan değil, sistemimizden geliyor.
-                ReceiveDate = DateTime.UtcNow,
-
-                FromAddress    = fromAddress,                  // "zbalbay@suenotur.com"
-                ToAddress      = toAddress,                    // "reservation@hotel.com"
-                Subject        = message.Subject ?? string.Empty,
-                Body           = body,                         // Ham HTML — parser sonra açacak
-                HasAttachments = hasAttachments,
-                IsRead         = false,                        // Kullanıcı henüz panelde görmedi
-
-                // "SUENO", "OTS/MTS", "JOLLYTUR" — hangi parser çalışacak?
-                ProviderName = providerName,
-
-                // PENDING: henüz rezervasyona çevrilmedi.
-                // Convert endpoint çağrılınca "CONVERTED" veya "FAILED" olacak.
-                Status = "PENDING"
+                UniqueId        = uid.ToString(),
+                UidKey          = message.MessageId ?? uid.ToString(),
+                MailDate        = message.Date.UtcDateTime,
+                ReceiveDate     = DateTime.UtcNow,
+                FromAddress     = fromAddress,
+                ToAddress       = toAddress,
+                Subject         = message.Subject ?? string.Empty,
+                Body            = body,
+                ContentFileUrl  = contentFileUrl,   // DigitalOcean Spaces linki
+                HasAttachments  = hasAttachments,
+                IsRead          = false,
+                ProviderName    = providerName,
+                ReservationType = reservationType,  // NEW / CHANGED / CANCELLED
+                Status          = "PENDING"
             };
 
             result.Add(incoming);
@@ -188,5 +172,52 @@ public class ImapMailFetchService
 
         // Hiçbiri eşleşmediyse: panelde görünür, el ile işlenir.
         return "UNKNOWN";
+    }
+
+    /// <summary>
+    /// Subject satırına bakarak rezervasyon tipini belirler.
+    ///
+    /// Kural:
+    ///   "600192 IPTAL BILGISI"          → CANCELLED  (IPTAL kelimesi var)
+    ///   "600718 ISIM DEGISIKLIK BILGISI" → CHANGED    (DEGISIKLIK veya DEĞİŞİKLİK var)
+    ///   "600701"                         → NEW        (sadece voucher numarası)
+    /// </summary>
+    private static string DetectReservationType(string? subject)
+    {
+        var sub = (subject ?? string.Empty).ToUpperInvariant();
+
+        // Türkçe karakterlerin hem ASCII hem Unicode versiyonunu kontrol ediyoruz.
+        // "İPTAL" → "IPTAL" (ToUpperInvariant zaten büyük harf yapıyor)
+        if (sub.Contains("IPTAL") || sub.Contains("İPTAL") || sub.Contains("CANCEL"))
+            return "CANCELLED";
+
+        if (sub.Contains("DEGISIKLIK") || sub.Contains("DEĞİŞİKLİK") ||
+            sub.Contains("CHANGE")     || sub.Contains("MODIFIED")    ||
+            sub.Contains("BILGISI")    || sub.Contains("BİLGİSİ"))
+            return "CHANGED";
+
+        return "NEW";
+    }
+
+    /// <summary>
+    /// Mail body'sinden DigitalOcean Spaces URL'sini çıkarır.
+    ///
+    /// Gerçek SUENO TUR mailleri body'de rezervasyon tablosunu taşımaz.
+    /// Bunun yerine içeriği bir HTML dosyası olarak Spaces'e yükler,
+    /// body'deki link üzerinden erişilir.
+    ///
+    /// Örnek link: https://reservations.ams3.digitaloceanspaces.com/bodies/htmls/87ce3285.html
+    /// </summary>
+    private static string? ExtractContentFileUrl(string body)
+    {
+        if (string.IsNullOrEmpty(body)) return null;
+
+        // "digitaloceanspaces.com" geçen bir URL ara
+        var match = System.Text.RegularExpressions.Regex.Match(
+            body,
+            @"https?://[^\s""'<>]+digitaloceanspaces\.com[^\s""'<>]*",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        return match.Success ? match.Value : null;
     }
 }

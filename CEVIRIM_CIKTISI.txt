@@ -1,0 +1,79 @@
+================================================================
+GERÇEK ÇEVİRİM ÇIKTISI — 25.04.2026
+================================================================
+inject-test → convert pipeline'ı çalıştırıldı.
+Aşağıdaki JSON'lar gerçek API cevaplarıdır.
+================================================================
+
+
+----------------------------------------------------------------
+[1] DÖNÜŞTÜRÜLEN MAİL (IncomingMails tablosundan)
+    Endpoint: GET /api/mail?mailId=5
+----------------------------------------------------------------
+
+{
+    "id":           5,
+    "uniqueId":     "TEST-639127083274611745",
+    "fromAddress":  "zbalbay@suenotur.com",
+    "toAddress":    "murat_keskin_2014@hotmail.com",
+    "subject":      "Rezervasyon Konfirmesi - 600701",
+    "providerName": "SUENO",
+    "status":       "CONVERTED",        ← başta PENDING'di, convert sonrası bu oldu
+    "convertedAt":  "2026-04-25T10:05:27"
+}
+
+
+----------------------------------------------------------------
+[2] OLUŞAN REZERVASYON (Reservations tablosundan)
+    Endpoint: GET /api/reservations
+----------------------------------------------------------------
+
+{
+    "id":              12,
+    "reservationType": "NEW",
+    "providerName":    "SUENO",
+    "agency":          "",
+    "voucher":         "600701",          ← HTML tablosundan: VOUCHER KODU kolonu
+    "hotel":           "",
+    "guestName":       "ERTUGRUL SIPAHI", ← HTML tablosundan: YOLCU ADI SOYADI kolonu
+    "roomType":        "DELUXE DENIZ STD",← HTML tablosundan: KATEGORİ kolonu
+    "pension":         "AI",              ← HTML tablosundan: P.D. kolonu
+    "checkIn":         "2026-08-28",      ← HTML tablosundan: DATEİN kolonu
+    "checkOut":        "2026-09-03",      ← HTML tablosundan: DATEOUT kolonu
+    "adultCount":      2,
+    "childCount":      0,
+    "babyCount":       0,
+    "roomCount":       1,
+    "source":          "SUENO",
+    "status":          "PENDING",         ← otel yazılımına henüz gönderilmedi
+    "saleDate":        "2026-04-25T10:05:27",
+    "createdAt":       "2026-04-25T10:05:27",
+    "errorMessage":    null
+}
+
+
+----------------------------------------------------------------
+[3] PARSE EDİLEN HTML TABLO (SuenoTurParser'ın okuduğu kaynak)
+----------------------------------------------------------------
+
+VOUCHER KODU | YOLCU ADI SOYADI | P.D. | ODA          | KATEGORİ         | DATEİN     | DATEOUT
+600701       | ERTUGRUL SIPAHI  | AI   | DOUBLE +1 CHD| DELUXE DENIZ STD | 28/08/2026 | 03/09/2026
+
+
+----------------------------------------------------------------
+[4] KENDİN DENEYECEK OLURSAN — KONTROL LİSTESİ
+----------------------------------------------------------------
+
+Kendi yazdığın kodun çıktısı yukarıdaki ile aynı mı?
+
+  voucher    = "600701"          ✓ / ✗
+  guestName  = "ERTUGRUL SIPAHI" ✓ / ✗
+  roomType   = "DELUXE DENIZ STD"✓ / ✗
+  pension    = "AI"              ✓ / ✗
+  checkIn    = "2026-08-28"      ✓ / ✗
+  checkOut   = "2026-09-03"      ✓ / ✗
+  status     = "CONVERTED"       ✓ / ✗
+
+Hepsi ✓ ise parser doğru çalışıyor demektir.
+
+================================================================

@@ -1,0 +1,187 @@
+================================================================
+HOTEL CHANNEL MANAGER — AKIŞ NOTLARI
+================================================================
+Tarih: 25.04.2026
+================================================================
+
+
+----------------------------------------------------------------
+1. GENEL AKIŞ
+----------------------------------------------------------------
+
+GMAIL (muratberatkeskin@gmail.com)
+    | SMTP ile test maili gönder (send-test endpoint)
+    ↓
+HOTMAIL (murat_keskin_2014@hotmail.com) → inbox'a düştü
+    | IMAP ile çek (fetch-imap endpoint)  ← Şu an OAuth2 gerekiyor, yarın Azure ile çözülecek
+    ↓
+DB → IncomingMails tablosuna kaydedildi (Status: PENDING)
+    | Convert endpoint çağrıldı
+    ↓
+SuenoTurParser → HTML body'yi okudu → ParsedReservation oluştu
+    ↓
+DB → Reservations tablosuna kaydedildi (Status: PENDING)
+    Mail → Status: CONVERTED
+
+
+----------------------------------------------------------------
+2. TEST ETMEK İÇİN ENDPOINT SIRASI
+----------------------------------------------------------------
+
+ADIM 1 — Login ol, token al:
+  POST /api/auth/login
+  Body: { "email": "admin@hotel.com", "password": "123456" }
+
+  Cevap: { "token": "eyJhbG..." }
+
+--
+
+ADIM 2 — Test maili DB'ye yaz (IMAP olmadan):
+  POST /api/mail/inject-test
+  Header: Authorization: Bearer eyJhbG...
+
+  Cevap: { "success": true, "mailId": 4 }
+
+--
+
+ADIM 3 — Maili rezervasyona çevir:
+  POST /api/mail/4/convert
+  Header: Authorization: Bearer eyJhbG...
+
+  Cevap: aşağıdaki JSON
+
+
+----------------------------------------------------------------
+3. MAİL JSON ÇIKTISI (convert sonrası mail nasıl görünüyor)
+----------------------------------------------------------------
+
+{
+  "id": 4,
+  "uniqueId": "TEST-639126645012520705",
+  "uidKey": "test@suenotur.com",
+  "mailDate": "2026-04-24T21:55:01",
+  "receiveDate": "2026-04-24T21:55:01",
+  "fromAddress": "zbalbay@suenotur.com",
+  "toAddress": "murat_keskin_2014@hotmail.com",
+  "subject": "Rezervasyon Konfirmesi - 600701",
+  "body": "<html>..SUENO TUR tablosu..</html>",
+  "hasAttachments": false,
+  "isRead": true,
+  "providerName": "SUENO",
+  "customerId": null,
+  "providerId": null,
+  "status": "CONVERTED",          ← PENDING'den CONVERTED'a geçti
+  "convertErrorMessage": null,    ← hata yoksa null
+  "convertedAt": "2026-04-24T21:55:01Z"
+}
+
+
+----------------------------------------------------------------
+4. REZERVASYON JSON ÇIKTISI (DB'ye yazılan Reservation)
+----------------------------------------------------------------
+
+{
+  "id": 11,
+  "reservationType": "NEW",
+  "providerName": "SUENO",
+  "agency": "",
+  "voucher": "600701",            ← HTML tablosundan çekildi
+  "hotel": "",
+  "guestName": "ERTUGRUL SIPAHI", ← HTML tablosundan çekildi
+  "roomType": "DELUXE DENIZ STD", ← KATEGORİ kolonundan çekildi
+  "pension": "AI",                ← P.D. kolonundan çekildi
+  "checkIn": "2026-08-28",        ← DATEİN kolonundan çekildi
+  "checkOut": "2026-09-03",       ← DATEOUT kolonundan çekildi
+  "adultCount": 2,
+  "childCount": 0,
+  "babyCount": 0,
+  "roomCount": 1,
+  "source": "SUENO",
+  "status": "PENDING",            ← Otel yazılımına henüz gönderilmedi
+  "saleDate": "2026-04-24T21:55:01Z",
+  "createdAt": "2026-04-24T21:55:01Z",
+  "errorMessage": null
+}
+
+
+----------------------------------------------------------------
+5. PARSE EDİLEN HTML TABLOSU (SuenoTurParser'ın okuduğu)
+----------------------------------------------------------------
+
+| VOUCHER KODU | YOLCU ADI SOYADI | P.D. | ODA          | KATEGORİ         | DATEİN     | DATEOUT    |
+|--------------|------------------|------|--------------|------------------|------------|------------|
+| 600701       | ERTUGRUL SIPAHI  | AI   | DOUBLE +1CHD | DELUXE DENIZ STD | 28/08/2026 | 03/09/2026 |
+
+SuenoTurParser bu tabloyu şöyle okudu:
+  - "VOUCHER" başlıklı kolon → index 0 → data[0] = "600701"   → Voucher
+  - "YOLCU"   başlıklı kolon → index 1 → data[1] = "ERTUGRUL SIPAHI" → GuestName
+  - "P.D."    başlıklı kolon → index 2 → data[2] = "AI"        → Pension
+  - "KATEGORİ" başlıklı kolon → index 5 → data[5] = "DELUXE DENIZ STD" → RoomType
+  - "DATEİN"  başlıklı kolon → index 6 → data[6] = "28/08/2026" → CheckIn
+  - "DATEOUT" başlıklı kolon → index 7 → data[7] = "03/09/2026" → CheckOut
+
+
+----------------------------------------------------------------
+6. DOSYA YAPISI VE GÖREVLERİ
+----------------------------------------------------------------
+
+Controllers/
+  MailController.cs         → HTTP istekleri alır, servisleri çağırır
+
+Services/
+  ImapMailFetchService.cs   → IMAP ile Outlook'tan mail çeker
+  SmtpSenderService.cs      → SMTP ile test maili gönderir
+  MailIntegrationService.cs → Mail → Rezervasyon dönüşümünü yönetir (orkestratör)
+  PdfParserService.cs       → Hangi parser kullanılacağına karar verir (router)
+  TestMailTemplates.cs      → SUENO TUR / OTS formatında HTML şablonu üretir
+
+  Parsers/
+    SuenoTurParser.cs       → SUENO TUR HTML tablosunu parse eder
+    OtsMtsParser.cs         → OTS/MTS düz metin formatını parse eder
+    JollyturParser.cs       → Jollytur HTML formatını parse eder
+
+Models/
+  IncomingMail.cs           → Gelen mailler DB tablosu
+  Reservation.cs            → Rezervasyonlar DB tablosu
+  ProviderIntegration.cs    → Kayıtlı entegrasyonlar DB tablosu
+
+Data/
+  AppDbContext.cs            → EF Core — C# nesnelerini DB tablolarına bağlar
+
+
+----------------------------------------------------------------
+7. YARMA YAPILACAKLAR
+----------------------------------------------------------------
+
+- Azure App Registration credentials alınacak
+  (Client ID, Tenant ID, Client Secret)
+
+- Microsoft Graph API servisi yazılacak
+  (ImapMailFetchService'in yerini alacak)
+
+- Gerçek mail akışı test edilecek:
+  Gmail → Hotmail → Graph API fetch → DB → Parse → Reservation
+
+
+----------------------------------------------------------------
+8. SMTP / IMAP BİLGİLERİ
+----------------------------------------------------------------
+
+Gmail SMTP:
+  Host: smtp.gmail.com
+  Port: 587 (STARTTLS)
+  Kullanıcı: muratberatkeskin@gmail.com
+  App Password: xntc cvli moly atad
+
+Hotmail IMAP:
+  Host: imap-mail.outlook.com
+  Port: 993 (SSL)
+  NOT: Microsoft consumer hesaplarda basic auth kapalı.
+       OAuth2 (Graph API) gerekiyor. Yarın Azure ile çözülecek.
+
+Uygulama:
+  Port: 5080
+  Swagger: http://localhost:5080/swagger
+  Login: admin@hotel.com / 123456
+
+================================================================

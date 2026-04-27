@@ -1,0 +1,205 @@
+================================================================
+HOTEL CHANNEL MANAGER — YAZMA PRATİĞİ
+================================================================
+Bu dosya sana neyi neden yazman gerektiğini gösterir.
+Her dosya için: GÖREV, İPUCU ve KONTROL LİSTESİ var.
+================================================================
+
+
+================================================================
+DOSYA 1 — SuenoTurParser.cs
+Konum: Services/Parsers/SuenoTurParser.cs
+Zorluk: ★★★★☆
+================================================================
+
+GÖREV:
+  SUENO TUR HTML mailindeki tablodan rezervasyon verilerini çıkar.
+
+GİRİŞ (ne alıyorsun):
+  string html → "<html>...<table><th>VOUCHER KODU</th>...<td>600701</td>...</table>...</html>"
+
+ÇIKIŞ (ne döndürüyorsun):
+  ParsedReservation { Voucher="600701", GuestName="ERTUGRUL SIPAHI", ... }
+  VEYA null (parse başarısızsa)
+
+YAZMA SIRASI:
+  1. Parse(string html) metodu → ana metod
+      a. HtmlDocument oluştur, LoadHtml() ile yükle
+      b. "//table//tr" ile tüm satırları seç
+      c. "VOUCHER" geçen satırı bul → headerIndex
+      d. headerIndex + 1 = veri satırı
+      e. Her kolonun indeksini bul (IndexOf ile)
+      f. Her indeksten veriyi çek (GetCell ile)
+      g. ParsedReservation nesnesini doldur, döndür
+
+  2. IndexOf(headers, searches) → kolon indeksi bul
+      a. headers listesini döngüyle gez
+      b. Her elemanda aranan kelime var mı?
+      c. Varsa o indeksi döndür
+      d. Bulamazsan -1 döndür
+
+  3. GetCell(data, idx) → güvenli hücre al
+      a. idx < 0 veya idx >= data.Count ise boş string dön
+      b. Değilse data[idx] dön
+
+  4. CleanText(raw) → HTML metnini temizle
+      a. HtmlDecode ile entity'leri çöz (&amp; → &)
+      b. Regex ile fazla boşlukları tek boşluğa çevir
+      c. Trim() ile baş/son boşlukları at
+
+  5. ParseDate(raw) → string tarihi DateOnly'e çevir
+      a. Boşsa bugünü döndür
+      b. Format listesi dene: "dd/MM/yyyy", "dd.MM.yyyy", "yyyy-MM-dd"
+      c. TryParseExact ile dene, başarılıysa döndür
+
+KONTROL LİSTESİ:
+  [ ] Parse("") → null mı dönüyor?
+  [ ] Tablo yoksa → null mı dönüyor?
+  [ ] Voucher = "600701" geliyor mu?
+  [ ] GuestName = "ERTUGRUL SIPAHI" geliyor mu?
+  [ ] CheckIn = 2026-08-28 geliyor mu?
+  [ ] CheckOut = 2026-09-03 geliyor mu?
+  [ ] Pension = "AI" geliyor mu?
+  [ ] RoomType = "DELUXE DENIZ STD" geliyor mu?
+
+AKLINDA BULUNSUN:
+  - HtmlAgilityPack: SelectNodes("//table//tr") tüm tr'leri seçer
+  - "th|td" → hem th hem td seçer
+  - headerIndex < 0 kontrolünü unutma
+  - headerIndex + 1 >= rows.Count kontrolünü unutma
+
+
+================================================================
+DOSYA 2 — MailIntegrationService.cs
+Konum: Services/MailIntegrationService.cs
+Zorluk: ★★★☆☆
+================================================================
+
+GÖREV:
+  Gelen maili al, parse et, rezervasyon oluştur.
+
+GİRİŞ (ne alıyorsun):
+  IncomingMail mail → DB'den gelen mail nesnesi
+  AppDbContext context → DB bağlantısı
+
+ÇIKIŞ (ne yapıyorsun):
+  → Reservation tablosuna yeni kayıt ekler
+  → mail.Status = "CONVERTED" veya "FAILED" yazar
+
+YAZMA SIRASI:
+  1. PDF eki var mı?
+      → AttachmentContent boş değilse
+      → Convert.FromBase64String() ile byte[] çevir
+      → _pdfParser.ParsePdf(providerName, bytes) çağır
+
+  2. Body veya ContentFileUrl var mı?
+      → Body boşsa ContentFileUrl'den HttpClient ile çek
+      → _pdfParser.ParseHtml(providerName, html) çağır
+      → Hâlâ null ise SUENO ile tekrar dene
+
+  3. parsed null ise:
+      → mail.Status = "FAILED"
+      → mail.ConvertErrorMessage = hata mesajı
+      → SaveChanges, return
+
+  4. Reservation oluştur:
+      → parsed'dan alanları al
+      → Boş alanlar için fallback yaz (? : operatörü)
+      → context.Reservations.Add(reservation)
+
+  5. Mail güncelle:
+      → mail.Status = "CONVERTED"
+      → mail.ConvertedAt = DateTime.UtcNow
+      → context.SaveChangesAsync()
+
+KONTROL LİSTESİ:
+  [ ] PDF gelince ParsePdf çağrılıyor mu?
+  [ ] HTML gelince ParseHtml çağrılıyor mu?
+  [ ] ContentFileUrl varsa HttpClient çekiyor mu?
+  [ ] parsed null ise FAILED yazıyor mu?
+  [ ] Reservation DB'ye kaydediliyor mu?
+  [ ] mail.Status CONVERTED oluyor mu?
+
+AKLINDA BULUNSUN:
+  - Convert.FromBase64String → base64 string → byte[]
+  - HttpClient → using var http = new HttpClient()
+  - default → DateOnly'nin varsayılan değeri (0001-01-01)
+  - SaveChangesAsync → hem mail hem reservation tek seferde kaydedilir
+
+
+================================================================
+DOSYA 3 — ImapMailFetchService.cs
+Konum: Services/ImapMailFetchService.cs
+Zorluk: ★★★★★
+================================================================
+
+GÖREV:
+  IMAP ile mail sunucusuna bağlan, okunmamış mailleri çek.
+
+GİRİŞ (ne alıyorsun):
+  imapHost, imapPort, email, password
+
+ÇIKIŞ (ne döndürüyorsun):
+  List<IncomingMail> → her mail bir IncomingMail nesnesi
+
+YAZMA SIRASI:
+  1. ImapClient oluştur (using var ile)
+  2. ConnectAsync(host, port, SslOnConnect)
+  3. AuthenticateAsync(email, password)
+  4. client.Inbox aç → OpenAsync(ReadWrite)
+  5. SearchAsync(SearchQuery.NotSeen) → UID listesi
+  6. Her UID için:
+      a. GetMessageAsync(uid) → MimeMessage
+      b. From, To, Subject, HtmlBody, Attachments al
+      c. DetectProvider(from, subject)
+      d. DetectReservationType(subject)
+      e. ExtractContentFileUrl(body)
+      f. IncomingMail nesnesi oluştur
+      g. AddFlagsAsync(uid, Seen) → okundu işaretle
+  7. DisconnectAsync(true)
+  8. Listeyi döndür
+
+  Ayrıca yazman gereken özel metodlar:
+  - DetectProvider(from, subject) → "SUENO" / "OTS/MTS" / ...
+  - DetectReservationType(subject) → "NEW" / "CHANGED" / "CANCELLED"
+  - ExtractContentFileUrl(body) → Regex ile URL çıkar
+
+KONTROL LİSTESİ:
+  [ ] Bağlantı SSL ile yapılıyor mu?
+  [ ] Okunmamış mailler geliyor mu?
+  [ ] Aynı mail iki kez eklenmiyor mu? (UniqueId kontrolü)
+  [ ] "IPTAL" subject → CANCELLED dönüyor mu?
+  [ ] "DEGISIKLIK" subject → CHANGED dönüyor mu?
+  [ ] DigitalOcean URL body'den çıkıyor mu?
+
+AKLINDA BULUNSUN:
+  - ToUpperInvariant() → Türkçe karakter sorunu olmaz
+  - Contains("IPTAL") önce, Contains("DEGISIKLIK") sonra kontrol et
+  - Regex: @"https?://[^\s""'<>]+digitaloceanspaces\.com[^\s""'<>]*"
+  - message.From.Mailboxes.FirstOrDefault()?.Address
+  - message.HtmlBody ?? message.TextBody ?? string.Empty
+
+
+================================================================
+YAZARKEN GENEL İPUÇLARI
+================================================================
+
+1. Önce metodun imzasını yaz:
+   public ParsedReservation? Parse(string html) { }
+
+2. Sonra içini doldur — adım adım
+
+3. Derleme hatası alırsan:
+   → using direktifini unuttun mu?
+   → Metod adını yanlış mı yazdın?
+   → Tip uyuşmuyor mu?
+
+4. Mantık hatası alırsan (derlenir ama yanlış çıktı):
+   → CEVIRIM_CIKTISI.txt'deki değerlerle karşılaştır
+   → Hangi adımda yanlış gidiyor bak
+
+5. null hataları için:
+   → Her ?.  yerine önce null check yaz, anladıktan sonra kısalt
+   → if (x != null) { } → x?.Something şeklinde kısalır
+
+================================================================

@@ -41,20 +41,34 @@ public class MailIntegrationService(
             var pdfBytes = Convert.FromBase64String(mail.AttachmentContent);
             parsed = _pdfParser.ParsePdf(mail.ProviderName, pdfBytes);
         }
-        else if (!string.IsNullOrEmpty(mail.Body))
+        else
         {
-            // PDF yok → Body'yi HTML veya plain text olarak parse et
-            _logger.LogInformation(
-                "HTML body parse ediliyor: MailId={Id}, Provider={Provider}",
-                mail.Id, mail.ProviderName);
+            // HTML içeriği body'den veya ContentFileUrl'den al
+            var htmlContent = mail.Body;
 
-            parsed = _pdfParser.ParseHtml(mail.ProviderName, mail.Body);
-
-            // HTML parse başarısız → bilinmeyen provider olabilir, yine de dene
-            if (parsed is null && mail.Body.Contains("<table", StringComparison.OrdinalIgnoreCase))
+            // Body boş ama ContentFileUrl varsa → DigitalOcean Spaces'den çek
+            if (string.IsNullOrEmpty(htmlContent) && !string.IsNullOrEmpty(mail.ContentFileUrl))
             {
-                // Tablo var ama provider tanınmadı → SUENO parser'ı dene (en yaygın format)
-                parsed = _pdfParser.ParseHtml("SUENO", mail.Body);
+                _logger.LogInformation(
+                    "ContentFileUrl'den HTML çekiliyor: MailId={Id}, Url={Url}",
+                    mail.Id, mail.ContentFileUrl);
+
+                using var http = new HttpClient();
+                http.Timeout = TimeSpan.FromSeconds(15);
+                htmlContent = await http.GetStringAsync(mail.ContentFileUrl);
+            }
+
+            if (!string.IsNullOrEmpty(htmlContent))
+            {
+                _logger.LogInformation(
+                    "HTML body parse ediliyor: MailId={Id}, Provider={Provider}",
+                    mail.Id, mail.ProviderName);
+
+                parsed = _pdfParser.ParseHtml(mail.ProviderName, htmlContent);
+
+                // Hâlâ null ve body'de tablo var → SUENO parser'ı zorla dene
+                if (parsed is null && htmlContent.Contains("<table", StringComparison.OrdinalIgnoreCase))
+                    parsed = _pdfParser.ParseHtml("SUENO", htmlContent);
             }
         }
 
@@ -70,8 +84,11 @@ public class MailIntegrationService(
         // 3. Rezervasyon oluştur
         var reservation = new Reservation
         {
-            ReservationType = string.IsNullOrEmpty(parsed.ReservationType)
-                              ? "NEW" : parsed.ReservationType,
+            // Mail'den gelen ReservationType öncelikli (subject'ten tespit edildi)
+            // Parser da bir şey döndürdüyse parser'ı kullan, ikisi de boşsa NEW
+            ReservationType = !string.IsNullOrEmpty(mail.ReservationType) && mail.ReservationType != "NEW"
+                              ? mail.ReservationType
+                              : (!string.IsNullOrEmpty(parsed.ReservationType) ? parsed.ReservationType : "NEW"),
             ProviderName = mail.ProviderName,
             Voucher      = parsed.Voucher,
             GuestName    = string.IsNullOrEmpty(parsed.GuestName)
