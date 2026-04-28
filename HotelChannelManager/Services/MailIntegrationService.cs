@@ -8,51 +8,28 @@ public class MailIntegrationService(
     ILogger<MailIntegrationService> _logger,
     PdfParserService _pdfParser)
 {
-
+    // Maili alır, parse eder, rezervasyon oluşturur.
+    // Status: PENDING → CONVERTED veya FAILED
     public async Task ProcessMailAsync(IncomingMail mail, AppDbContext context)
     {
-        _logger.LogInformation(
-            "Mail işleniyor: From={From}, Provider={Provider}",
-            mail.FromAddress, mail.ProviderName);
+        _logger.LogInformation("Mail işleniyor: {From} | {Provider}", mail.FromAddress, mail.ProviderName);
 
-        // 1. Entegrasyon var mı kontrol et
-        var integration = await context.ProviderIntegrations
-            .FirstOrDefaultAsync(p =>
-                p.ProviderName == mail.ProviderName && p.IsActive);
-
-        // Entegrasyon yoksa "UNKNOWN_RESERVATION" veya "SUENO" gibi direkt parse deneriz
-        // Gerçek sistemde bu kural DB'den gelir — şimdilik esnek bırakıyoruz
-        if (integration is null)
-        {
-            _logger.LogWarning(
-                "Kayıtlı entegrasyon bulunamadı, direkt parse deneniyor: Provider={Provider}",
-                mail.ProviderName);
-        }
-
-        // 2. Parse stratejisine karar ver:
-        //    - PDF eki varsa → PDF parse
-        //    - Body HTML içeriyorsa → HTML parse
         ParsedReservation? parsed = null;
 
         if (!string.IsNullOrEmpty(mail.AttachmentContent))
         {
-            // PDF eki var → PDF parse
-            _logger.LogInformation("PDF eki parse ediliyor: MailId={Id}", mail.Id);
+            // PDF eki var → base64 decode → PDF parse
             var pdfBytes = Convert.FromBase64String(mail.AttachmentContent);
             parsed = _pdfParser.ParsePdf(mail.ProviderName, pdfBytes);
         }
         else
         {
-            // HTML içeriği body'den veya ContentFileUrl'den al
+            // HTML içeriği body'den al, body boşsa ContentFileUrl'den çek
             var htmlContent = mail.Body;
 
-            // Body boş ama ContentFileUrl varsa → DigitalOcean Spaces'den çek
             if (string.IsNullOrEmpty(htmlContent) && !string.IsNullOrEmpty(mail.ContentFileUrl))
             {
-                _logger.LogInformation(
-                    "ContentFileUrl'den HTML çekiliyor: MailId={Id}, Url={Url}",
-                    mail.Id, mail.ContentFileUrl);
-
+                _logger.LogInformation("URL'den HTML çekiliyor: {Url}", mail.ContentFileUrl);
                 using var http = new HttpClient();
                 http.Timeout = TimeSpan.FromSeconds(15);
                 htmlContent = await http.GetStringAsync(mail.ContentFileUrl);
@@ -60,13 +37,9 @@ public class MailIntegrationService(
 
             if (!string.IsNullOrEmpty(htmlContent))
             {
-                _logger.LogInformation(
-                    "HTML body parse ediliyor: MailId={Id}, Provider={Provider}",
-                    mail.Id, mail.ProviderName);
-
                 parsed = _pdfParser.ParseHtml(mail.ProviderName, htmlContent);
 
-                // Hâlâ null ve body'de tablo var → SUENO parser'ı zorla dene
+                // Provider tanınmadı ama tablolu HTML var → SUENO parser'ı dene
                 if (parsed is null && htmlContent.Contains("<table", StringComparison.OrdinalIgnoreCase))
                     parsed = _pdfParser.ParseHtml("SUENO", htmlContent);
             }
@@ -74,42 +47,36 @@ public class MailIntegrationService(
 
         if (parsed is null)
         {
-            _logger.LogWarning("Parse başarısız: MailId={Id}", mail.Id);
             mail.Status = "FAILED";
-            mail.ConvertErrorMessage = $"Mail body parse edilemedi. Provider: {mail.ProviderName}";
+            mail.ConvertErrorMessage = $"Parse edilemedi. Provider: {mail.ProviderName}";
             await context.SaveChangesAsync();
             return;
         }
 
-        // 3. Rezervasyon oluştur
+        // Mail'den gelen tip öncelikli (subject'ten tespit edildi)
+        var reservationType = mail.ReservationType != "NEW" && !string.IsNullOrEmpty(mail.ReservationType)
+            ? mail.ReservationType
+            : (parsed.ReservationType ?? "NEW");
+
         var reservation = new Reservation
         {
-            // Mail'den gelen ReservationType öncelikli (subject'ten tespit edildi)
-            // Parser da bir şey döndürdüyse parser'ı kullan, ikisi de boşsa NEW
-            ReservationType = !string.IsNullOrEmpty(mail.ReservationType) && mail.ReservationType != "NEW"
-                              ? mail.ReservationType
-                              : (!string.IsNullOrEmpty(parsed.ReservationType) ? parsed.ReservationType : "NEW"),
-            ProviderName = mail.ProviderName,
-            Voucher      = parsed.Voucher,
-            GuestName    = string.IsNullOrEmpty(parsed.GuestName)
-                           ? "Unknown Guest" : parsed.GuestName,
-            RoomType     = string.IsNullOrEmpty(parsed.RoomType)
-                           ? "STANDARD" : parsed.RoomType,
-            Pension      = parsed.Pension,
-            CheckIn      = parsed.CheckIn == default
-                           ? DateOnly.FromDateTime(DateTime.Today) : parsed.CheckIn,
-            CheckOut     = parsed.CheckOut == default
-                           ? DateOnly.FromDateTime(DateTime.Today.AddDays(7)) : parsed.CheckOut,
-            AdultCount   = parsed.AdultCount > 0 ? parsed.AdultCount : 2,
-            ChildCount   = parsed.ChildCount,
-            Source       = mail.ProviderName,
-            Status       = "PENDING",
-            SaleDate     = DateTime.UtcNow
+            ReservationType = reservationType,
+            ProviderName    = mail.ProviderName,
+            Voucher         = parsed.Voucher,
+            GuestName       = string.IsNullOrEmpty(parsed.GuestName) ? "Unknown Guest" : parsed.GuestName,
+            RoomType        = string.IsNullOrEmpty(parsed.RoomType)  ? "STANDARD"       : parsed.RoomType,
+            Pension         = parsed.Pension,
+            CheckIn         = parsed.CheckIn  == default ? DateOnly.FromDateTime(DateTime.Today)            : parsed.CheckIn,
+            CheckOut        = parsed.CheckOut == default ? DateOnly.FromDateTime(DateTime.Today.AddDays(7)) : parsed.CheckOut,
+            AdultCount      = parsed.AdultCount > 0 ? parsed.AdultCount : 2,
+            ChildCount      = parsed.ChildCount,
+            Source          = mail.ProviderName,
+            Status          = "PENDING",
+            SaleDate        = DateTime.UtcNow
         };
 
         context.Reservations.Add(reservation);
 
-        // 4. Mail durumunu güncelle
         mail.Status      = "CONVERTED";
         mail.IsRead      = true;
         mail.ConvertedAt = DateTime.UtcNow;
@@ -117,7 +84,7 @@ public class MailIntegrationService(
         await context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Rezervasyon oluşturuldu: MailId={Id}, ReservationId={ResId}, Guest={Guest}, Voucher={Voucher}",
-            mail.Id, reservation.Id, reservation.GuestName, reservation.Voucher);
+            "Rezervasyon oluşturuldu: MailId={Id} | Voucher={Voucher} | Guest={Guest}",
+            mail.Id, reservation.Voucher, reservation.GuestName);
     }
 }
