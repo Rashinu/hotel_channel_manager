@@ -3,6 +3,11 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
+# Ana proje — sadece pratik branch'te gizlenir
+HotelChannelManager/
+CEVIRIM_CIKTISI.txt
+PRATIK.txt
+
 # dotenv files
 .env
 

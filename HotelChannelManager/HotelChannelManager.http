@@ -1,6 +1,0 @@
-@HotelChannelManager_HostAddress = http://localhost:5080
-
-GET {{HotelChannelManager_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
